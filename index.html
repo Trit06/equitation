@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#8C4A2F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Carnet d'équitation</title>
+<style>
+:root{
+  --sable:#FBF6EE;
+  --sable-2:#F3EADC;
+  --carte:#FFFFFF;
+  --encre:#2A231D;
+  --encre-doux:#6E6153;
+  --trait:#E2D6C4;
+  --cuir:#8C4A2F;
+  --cuir-clair:#C4795A;
+  --paddock:#4A6350;
+  --absent:#A08E7A;
+  --ombre:0 1px 2px rgba(42,35,29,.06), 0 6px 18px rgba(42,35,29,.06);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --sable:#17130F;
+    --sable-2:#201A15;
+    --carte:#221C16;
+    --encre:#F0E7DA;
+    --encre-doux:#A5988A;
+    --trait:#3A3029;
+    --cuir:#D98A64;
+    --cuir-clair:#B06B4C;
+    --paddock:#7FA089;
+    --absent:#7A6B5C;
+    --ombre:0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --sable:#17130F;
+  --sable-2:#201A15;
+  --carte:#221C16;
+  --encre:#F0E7DA;
+  --encre-doux:#A5988A;
+  --trait:#3A3029;
+  --cuir:#D98A64;
+  --cuir-clair:#B06B4C;
+  --paddock:#7FA089;
+  --absent:#7A6B5C;
+  --ombre:0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.25);
+  color-scheme: dark;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--sable);
+  color:var(--encre);
+  font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:calc(80px + env(safe-area-inset-bottom,0px));
+  -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:560px;margin:0 auto;padding-inline:16px}
+h1,h2,h3{margin:0;font-family:ui-serif,Georgia,"Times New Roman",serif;font-weight:600;text-wrap:balance}
+button{font:inherit;color:inherit;cursor:pointer}
+.tnum{font-variant-numeric:tabular-nums}
+
+/* ---- en-tête ---- */
+header{padding-block:20px 8px;display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+header h1{font-size:21px;letter-spacing:-.01em}
+.sync{
+  border:1px solid var(--trait);background:transparent;color:var(--encre-doux);
+  border-radius:999px;padding:5px 11px;font-size:12px;display:flex;align-items:center;gap:6px;
+}
+.sync .pastille{width:7px;height:7px;border-radius:50%;background:var(--absent);flex:none}
+.sync[data-etat="ok"] .pastille{background:var(--paddock)}
+.sync[data-etat="occupe"] .pastille{background:var(--cuir-clair);animation:pulse 1s ease-in-out infinite}
+.sync[data-etat="erreur"] .pastille{background:#C0392B}
+@keyframes pulse{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.sync[data-etat="occupe"] .pastille{animation:none}}
+
+/* ---- compteur ---- */
+.compteur{
+  background:var(--carte);border:1px solid var(--trait);border-radius:14px;
+  padding:18px 18px 16px;box-shadow:var(--ombre);
+}
+.compteur .grand{display:flex;align-items:baseline;gap:9px}
+.compteur .nb{font-family:ui-serif,Georgia,serif;font-size:52px;line-height:1;color:var(--cuir)}
+.compteur .sur{font-size:14px;color:var(--encre-doux)}
+.compteur .lib{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--encre-doux);margin-bottom:6px}
+.jauge{height:7px;border-radius:4px;background:var(--sable-2);overflow:hidden;margin-top:14px;display:flex}
+.jauge i{display:block;height:100%}
+.detail{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:12px;font-size:13px;color:var(--encre-doux)}
+.detail b{color:var(--encre);font-weight:600}
+.puce{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:1px}
+
+/* ---- calendrier ---- */
+.mois{display:flex;align-items:center;justify-content:space-between;margin:26px 0 10px}
+.mois h2{font-size:17px;text-transform:capitalize}
+.nav{display:flex;gap:6px}
+.nav button{
+  width:34px;height:34px;border-radius:9px;border:1px solid var(--trait);
+  background:var(--carte);display:grid;place-items:center;font-size:15px;color:var(--encre-doux);
+}
+.nav button:hover{border-color:var(--cuir-clair);color:var(--cuir)}
+.jours-noms{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px}
+.jours-noms span{text-align:center;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--encre-doux)}
+.grille{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.case{
+  aspect-ratio:1/1;border:1px solid var(--trait);border-radius:10px;background:var(--carte);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  font-size:14px;padding:0;min-width:0;
+}
+.case.vide{border:none;background:transparent;cursor:default}
+.case.hors{color:var(--encre-doux);opacity:.45}
+.case.jour-j{border-color:var(--cuir);box-shadow:inset 0 0 0 1px var(--cuir)}
+.case.selection{background:var(--cuir);border-color:var(--cuir);color:#fff}
+.case.selection .pts i{outline:1.5px solid var(--cuir)}
+.case .pts{display:flex;gap:3px;height:7px;align-items:center}
+.case .pts i{width:7px;height:7px;border-radius:50%;display:block}
+.case .pts i.abs{background:transparent!important;box-shadow:inset 0 0 0 1.5px var(--absent)}
+.case:focus-visible{outline:2px solid var(--cuir);outline-offset:2px}
+
+/* ---- panneau du jour ---- */
+.jour{
+  margin-top:14px;background:var(--carte);border:1px solid var(--trait);border-radius:14px;
+  padding:16px;box-shadow:var(--ombre);
+}
+.jour .date{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--encre-doux);margin-bottom:12px}
+.enfants{display:flex;flex-direction:column;gap:8px}
+.enfant{
+  display:flex;align-items:center;gap:11px;width:100%;text-align:left;
+  border:1px solid var(--trait);border-radius:11px;background:transparent;padding:11px 13px;
+}
+.enfant .nom{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.enfant .etat{font-size:12.5px;color:var(--encre-doux);flex:none}
+.enfant .jeton{width:14px;height:14px;border-radius:50%;flex:none;border:1.5px solid var(--trait);background:transparent}
+.enfant[data-etat="p"]{border-color:var(--cuir-clair);background:color-mix(in srgb,var(--cuir) 8%,transparent)}
+.enfant[data-etat="p"] .etat{color:var(--cuir)}
+.enfant[data-etat="x"] .etat{color:var(--absent)}
+.enfant[data-etat="x"] .jeton{border-style:dashed;border-color:var(--absent)}
+.aide{margin-top:11px;font-size:12px;color:var(--encre-doux)}
+
+/* ---- réglages ---- */
+.pied{margin:22px 0 0;display:flex;gap:8px;flex-wrap:wrap}
+.lien{background:transparent;border:1px solid var(--trait);border-radius:9px;padding:8px 13px;font-size:13px;color:var(--encre-doux)}
+.lien:hover{border-color:var(--cuir-clair);color:var(--cuir)}
+dialog{
+  border:1px solid var(--trait);border-radius:14px;background:var(--carte);color:var(--encre);
+  padding:0;max-width:440px;width:calc(100% - 32px);box-shadow:var(--ombre);
+}
+dialog::backdrop{background:rgba(20,15,10,.45)}
+.modale{padding:18px}
+.modale h2{font-size:18px;margin-bottom:4px}
+.modale p.sous{margin:0 0 16px;font-size:13px;color:var(--encre-doux)}
+fieldset{border:none;border-top:1px solid var(--trait);margin:16px 0 0;padding:14px 0 0}
+legend{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--encre-doux);padding:0}
+label{display:block;font-size:12.5px;color:var(--encre-doux);margin:10px 0 4px}
+input[type=text],input[type=number],input[type=password]{
+  width:100%;padding:9px 11px;border:1px solid var(--trait);border-radius:9px;
+  background:var(--sable);color:var(--encre);font:inherit;
+}
+input:focus{outline:2px solid var(--cuir);outline-offset:1px;border-color:transparent}
+.rangee{display:flex;gap:10px}
+.rangee>*{flex:1;min-width:0}
+.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap}
+.btn{border:1px solid var(--trait);background:transparent;border-radius:9px;padding:9px 15px;font-size:14px}
+.btn.primaire{background:var(--cuir);border-color:var(--cuir);color:#fff}
+.note{font-size:12px;color:var(--encre-doux);margin-top:10px;line-height:1.45}
+.note code{background:var(--sable-2);padding:1px 4px;border-radius:4px;font-size:11.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Carnet d'équitation</h1>
+    <button class="sync" id="btnSync" data-etat="local" title="Synchroniser">
+      <span class="pastille"></span><span id="syncTxt">Local</span>
+    </button>
+  </header>
+
+  <section class="compteur">
+    <div class="lib">Cours restants</div>
+    <div class="grand">
+      <span class="nb tnum" id="restants">—</span>
+      <span class="sur tnum">sur <span id="quotaTxt">48</span></span>
+    </div>
+    <div class="jauge" id="jauge"></div>
+    <div class="detail" id="detail"></div>
+  </section>
+
+  <div class="mois">
+    <h2 id="titreMois">—</h2>
+    <div class="nav">
+      <button id="prev" aria-label="Mois précédent">‹</button>
+      <button id="auj" aria-label="Aujourd'hui" style="width:auto;padding:0 12px;font-size:13px">Auj.</button>
+      <button id="next" aria-label="Mois suivant">›</button>
+    </div>
+  </div>
+  <div class="jours-noms"><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
+  <div class="grille" id="grille"></div>
+
+  <section class="jour" id="panneau" hidden>
+    <div class="date" id="dateSel"></div>
+    <div class="enfants" id="listeEnfants"></div>
+    <div class="aide">Touchez un nom pour faire défiler&nbsp;: rien → venu → absent.</div>
+  </section>
+
+  <div class="pied">
+    <button class="lien" id="btnReglages">Réglages</button>
+    <button class="lien" id="btnHisto">Historique</button>
+  </div>
+</div>
+
+<dialog id="dlgReglages"><form method="dialog" class="modale">
+  <h2>Réglages</h2>
+  <p class="sous">Le forfait, les prénoms et la synchronisation partagée.</p>
+
+  <fieldset><legend>Forfait</legend>
+    <label for="fQuota">Nombre total de cours</label>
+    <input type="number" id="fQuota" min="1" max="999" inputmode="numeric">
+  </fieldset>
+
+  <fieldset><legend>Cavaliers</legend>
+    <div class="rangee">
+      <div><label for="fNom1">Prénom 1</label><input type="text" id="fNom1" autocomplete="off"></div>
+      <div><label for="fNom2">Prénom 2</label><input type="text" id="fNom2" autocomplete="off"></div>
+    </div>
+  </fieldset>
+
+  <fieldset><legend>Synchronisation GitHub</legend>
+    <div class="rangee">
+      <div><label for="fOwner">Compte</label><input type="text" id="fOwner" placeholder="Trit06" autocomplete="off" spellcheck="false"></div>
+      <div><label for="fRepo">Dépôt</label><input type="text" id="fRepo" placeholder="trit06.github.io" autocomplete="off" spellcheck="false"></div>
+    </div>
+    <label for="fPath">Fichier de données</label>
+    <input type="text" id="fPath" placeholder="equitation/data.json" autocomplete="off" spellcheck="false">
+    <label for="fToken">Jeton d'accès (pour modifier)</label>
+    <input type="password" id="fToken" placeholder="github_pat_…" autocomplete="off" spellcheck="false">
+    <div class="note">Sans jeton, l'app est en lecture seule&nbsp;: le compteur s'affiche mais les cases ne se cochent pas. Le jeton reste sur cet appareil.</div>
+  </fieldset>
+
+  <div class="actions">
+    <button class="btn" value="annuler" formnovalidate>Annuler</button>
+    <button class="btn primaire" value="ok" id="btnEnregistrer">Enregistrer</button>
+  </div>
+</form></dialog>
+
+<dialog id="dlgHisto"><div class="modale">
+  <h2>Historique</h2>
+  <p class="sous" id="histoSous"></p>
+  <div id="histoListe" style="max-height:52vh;overflow-y:auto"></div>
+  <div class="actions"><button class="btn" id="fermerHisto">Fermer</button></div>
+</div></dialog>
+
+<script>
+"use strict";
+const CLE = "equit_";
+const COULEURS = ["#8C4A2F", "#4A6350"];
+const MOIS = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
+
+/* ---------- stockage local ---------- */
+function lire(cle, defaut){
+  try{ const v = localStorage.getItem(CLE+cle); return v===null ? defaut : JSON.parse(v); }
+  catch(e){ return defaut; }
+}
+function ecrire(cle, val){
+  try{ localStorage.setItem(CLE+cle, JSON.stringify(val)); }catch(e){}
+}
+
+/* ---------- état ---------- */
+const donneesVides = () => ({
+  version: 1,
+  quota: 48,
+  enfants: [{id:"a", nom:"Cavalier 1"}, {id:"b", nom:"Cavalier 2"}],
+  seances: {}          // "2026-09-19": {a:"p", b:"x"}   p=venu  x=absent
+});
+
+let data   = Object.assign(donneesVides(), lire("data", null) || {});
+let cfg    = lire("cfg", {owner:"", repo:"", path:"equitation/data.json"});
+let token  = lire("token", "");
+let sha    = null;
+let enAttente = lire("attente", {});    // dates modifiées hors-ligne
+let curseur = new Date();
+let selection = null;
+let etatSync = "local";
+
+const $ = s => document.querySelector(s);
+const clefDate = d => d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const couleur = i => COULEURS[i % COULEURS.length];
+const synchroActive = () => !!(cfg.owner && cfg.repo && cfg.path);
+const peutEcrire = () => !synchroActive() || !!token;
+
+/* ---------- comptage ---------- */
+function stats(){
+  const pris = {}, abs = {};
+  data.enfants.forEach(e => { pris[e.id]=0; abs[e.id]=0; });
+  for(const j of Object.values(data.seances)){
+    for(const [id, etat] of Object.entries(j||{})){
+      if(!(id in pris)) continue;
+      if(etat==="p") pris[id]++;
+      else if(etat==="x") abs[id]++;
+    }
+  }
+  const total = Object.values(pris).reduce((a,b)=>a+b, 0);
+  return {pris, abs, total, restants: Math.max(0, data.quota - total)};
+}
+
+/* ---------- rendu ---------- */
+function rendre(){
+  const s = stats();
+  $("#restants").textContent = s.restants;
+  $("#quotaTxt").textContent = data.quota;
+
+  const jauge = $("#jauge");
+  jauge.textContent = "";
+  data.enfants.forEach((e,i)=>{
+    const part = document.createElement("i");
+    part.style.width = (data.quota ? (s.pris[e.id]/data.quota*100) : 0)+"%";
+    part.style.background = couleur(i);
+    jauge.appendChild(part);
+  });
+
+  const det = $("#detail");
+  det.textContent = "";
+  data.enfants.forEach((e,i)=>{
+    const sp = document.createElement("span");
+    const pu = document.createElement("span");
+    pu.className = "puce"; pu.style.background = couleur(i);
+    sp.appendChild(pu);
+    const b = document.createElement("b");
+    b.className = "tnum";
+    b.textContent = s.pris[e.id];
+    sp.appendChild(document.createTextNode(e.nom+" : "));
+    sp.appendChild(b);
+    sp.appendChild(document.createTextNode(" cours"+(s.abs[e.id] ? "  ·  "+s.abs[e.id]+" absence"+(s.abs[e.id]>1?"s":"") : "")));
+    det.appendChild(sp);
+  });
+  const tot = document.createElement("span");
+  tot.innerHTML = "Total pris : <b class='tnum'>"+s.total+"</b>";
+  det.appendChild(tot);
+
+  rendreCalendrier();
+  rendrePanneau();
+  rendreSync();
+}
+
+function rendreCalendrier(){
+  const an = curseur.getFullYear(), mo = curseur.getMonth();
+  $("#titreMois").textContent = MOIS[mo]+" "+an;
+
+  const g = $("#grille");
+  g.textContent = "";
+  const premier = new Date(an, mo, 1);
+  const decalage = (premier.getDay()+6)%7;          // lundi en tête
+  const nbJours = new Date(an, mo+1, 0).getDate();
+  const ajd = clefDate(new Date());
+
+  for(let i=0;i<decalage;i++){
+    const v = document.createElement("div");
+    v.className = "case vide";
+    g.appendChild(v);
+  }
+  for(let n=1;n<=nbJours;n++){
+    const cle = an+"-"+String(mo+1).padStart(2,"0")+"-"+String(n).padStart(2,"0");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "case" + (cle===ajd ? " jour-j" : "") + (cle===selection ? " selection" : "");
+    b.dataset.date = cle;
+    const num = document.createElement("span");
+    num.className = "tnum";
+    num.textContent = n;
+    b.appendChild(num);
+    const pts = document.createElement("span");
+    pts.className = "pts";
+    const j = data.seances[cle] || {};
+    data.enfants.forEach((e,i)=>{
+      const etat = j[e.id];
+      if(!etat) return;
+      const p = document.createElement("i");
+      if(etat==="x") p.className = "abs";
+      else p.style.background = couleur(i);
+      pts.appendChild(p);
+    });
+    b.appendChild(pts);
+    g.appendChild(b);
+  }
+}
+
+function rendrePanneau(){
+  const pan = $("#panneau");
+  if(!selection){ pan.hidden = true; return; }
+  pan.hidden = false;
+  const [a,m,j] = selection.split("-").map(Number);
+  const d = new Date(a, m-1, j);
+  $("#dateSel").textContent = d.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+
+  const liste = $("#listeEnfants");
+  liste.textContent = "";
+  const jour = data.seances[selection] || {};
+  data.enfants.forEach((e,i)=>{
+    const etat = jour[e.id] || "";
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "enfant";
+    b.dataset.etat = etat;
+    b.dataset.enfant = e.id;
+    b.disabled = !peutEcrire();
+    const jeton = document.createElement("span");
+    jeton.className = "jeton";
+    if(etat==="p"){ jeton.style.background = couleur(i); jeton.style.borderColor = couleur(i); }
+    b.appendChild(jeton);
+    const nom = document.createElement("span");
+    nom.className = "nom";
+    nom.textContent = e.nom;
+    b.appendChild(nom);
+    const et = document.createElement("span");
+    et.className = "etat";
+    et.textContent = etat==="p" ? "Venu · 1 cours" : etat==="x" ? "Absent" : "—";
+    b.appendChild(et);
+    liste.appendChild(b);
+  });
+}
+
+function rendreSync(){
+  const b = $("#btnSync");
+  b.dataset.etat = etatSync;
+  const libelles = {
+    local:"Local", ok:"À jour", occupe:"Synchro…", erreur:"Erreur",
+    lecture:"Lecture seule", attente:"À envoyer"
+  };
+  $("#syncTxt").textContent = libelles[etatSync] || "Local";
+}
+
+/* ---------- modification ---------- */
+const CYCLE = {"":"p", "p":"x", "x":""};
+
+function basculer(idEnfant){
+  if(!selection || !peutEcrire()) return;
+  const jour = Object.assign({}, data.seances[selection] || {});
+  jour[idEnfant] = CYCLE[jour[idEnfant] || ""];
+  if(!jour[idEnfant]) delete jour[idEnfant];
+  if(Object.keys(jour).length) data.seances[selection] = jour;
+  else delete data.seances[selection];
+
+  enAttente[selection] = true;
+  sauverLocal();
+  rendre();
+  planifierEnvoi();
+}
+
+function sauverLocal(){
+  ecrire("data", data);
+  ecrire("attente", enAttente);
+}
+
+/* ---------- synchronisation GitHub ---------- */
+function b64Encoder(txt){
+  const oct = new TextEncoder().encode(txt);
+  let bin = "";
+  oct.forEach(o => bin += String.fromCharCode(o));
+  return btoa(bin);
+}
+function b64Decoder(b64){
+  const bin = atob(b64.replace(/\s/g, ""));
+  const oct = Uint8Array.from(bin, c => c.charCodeAt(0));
+  return new TextDecoder().decode(oct);
+}
+function urlContenu(){
+  return "https://api.github.com/repos/"+encodeURIComponent(cfg.owner)+"/"+
+         encodeURIComponent(cfg.repo)+"/contents/"+cfg.path.split("/").map(encodeURIComponent).join("/");
+}
+function entetes(){
+  const h = {"Accept":"application/vnd.github+json"};
+  if(token) h["Authorization"] = "Bearer "+token;
+  return h;
+}
+
+async function telecharger(){
+  const r = await fetch(urlContenu()+"?horodatage="+Date.now(), {headers: entetes(), cache:"no-store"});
+  if(r.status === 404) return {sha:null, distant:null};
+  if(!r.ok) throw new Error("GitHub "+r.status);
+  const j = await r.json();
+  return {sha: j.sha, distant: JSON.parse(b64Decoder(j.content))};
+}
+
+async function televerser(contenu, shaActuel){
+  const corps = {
+    message: "Mise à jour des cours — "+new Date().toLocaleString("fr-FR"),
+    content: b64Encoder(JSON.stringify(contenu, null, 2))
+  };
+  if(shaActuel) corps.sha = shaActuel;
+  const r = await fetch(urlContenu(), {method:"PUT", headers:Object.assign({"Content-Type":"application/json"}, entetes()), body: JSON.stringify(corps)});
+  if(!r.ok){ const e = new Error("GitHub "+r.status); e.statut = r.status; throw e; }
+  const j = await r.json();
+  return j.content && j.content.sha;
+}
+
+function fusionner(distant){
+  if(!distant) return JSON.parse(JSON.stringify(data));
+  const fusion = JSON.parse(JSON.stringify(distant));
+  fusion.seances = fusion.seances || {};
+  fusion.enfants = (fusion.enfants && fusion.enfants.length) ? fusion.enfants : data.enfants;
+  fusion.quota   = typeof fusion.quota === "number" ? fusion.quota : data.quota;
+  // nos modifications locales non envoyées l'emportent, date par date
+  for(const cle of Object.keys(enAttente)){
+    if(data.seances[cle]) fusion.seances[cle] = data.seances[cle];
+    else delete fusion.seances[cle];
+  }
+  if(enAttente.__config){
+    fusion.quota = data.quota;
+    fusion.enfants = data.enfants;
+  }
+  return fusion;
+}
+
+let envoiPlanifie = null;
+function planifierEnvoi(){
+  if(!synchroActive() || !token){ etatSync = synchroActive() ? "lecture" : "local"; rendreSync(); return; }
+  etatSync = "attente"; rendreSync();
+  clearTimeout(envoiPlanifie);
+  envoiPlanifie = setTimeout(() => synchroniser(true), 900);
+}
+
+let enCours = false;
+async function synchroniser(avecEnvoi){
+  if(!synchroActive()){ etatSync = "local"; rendreSync(); return; }
+  if(enCours) return;
+  enCours = true;
+  etatSync = "occupe"; rendreSync();
+  try{
+    const {sha:shaDistant, distant} = await telecharger();
+    sha = shaDistant;
+    const aEnvoyer = avecEnvoi && token && Object.keys(enAttente).length > 0;
+    const fusion = fusionner(distant);
+
+    if(aEnvoyer){
+      try{
+        sha = await televerser(fusion, sha);
+      }catch(e){
+        if(e.statut === 409){                       // conflit : on relit et on refait
+          const relu = await telecharger();
+          sha = await televerser(fusionner(relu.distant), relu.sha);
+        }else throw e;
+      }
+      enAttente = {};
+      ecrire("attente", enAttente);
+    }
+
+    data = fusion;
+    sauverLocal();
+    etatSync = token ? "ok" : "lecture";
+    rendre();
+  }catch(e){
+    console.warn(e);
+    etatSync = "erreur";
+    rendreSync();
+  }finally{
+    enCours = false;
+  }
+}
+
+/* ---------- historique ---------- */
+function ouvrirHistorique(){
+  const cles = Object.keys(data.seances).sort().reverse();
+  const s = stats();
+  $("#histoSous").textContent = cles.length
+    ? s.total+" cours pris, "+s.restants+" restants sur "+data.quota+"."
+    : "Aucune séance enregistrée pour l'instant.";
+  const box = $("#histoListe");
+  box.textContent = "";
+  cles.forEach(cle=>{
+    const [a,m,j] = cle.split("-").map(Number);
+    const ligne = document.createElement("div");
+    ligne.style.cssText = "display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--trait);font-size:13.5px";
+    const g = document.createElement("span");
+    g.textContent = new Date(a,m-1,j).toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short",year:"numeric"});
+    const d = document.createElement("span");
+    d.style.color = "var(--encre-doux)";
+    d.textContent = data.enfants
+      .filter(e => (data.seances[cle]||{})[e.id])
+      .map(e => e.nom + ((data.seances[cle][e.id]==="x") ? " (absent)" : ""))
+      .join(", ");
+    ligne.append(g, d);
+    box.appendChild(ligne);
+  });
+  $("#dlgHisto").showModal();
+}
+
+/* ---------- réglages ---------- */
+function ouvrirReglages(){
+  $("#fQuota").value = data.quota;
+  $("#fNom1").value = data.enfants[0] ? data.enfants[0].nom : "";
+  $("#fNom2").value = data.enfants[1] ? data.enfants[1].nom : "";
+  $("#fOwner").value = cfg.owner;
+  $("#fRepo").value  = cfg.repo;
+  $("#fPath").value  = cfg.path;
+  $("#fToken").value = token;
+  $("#dlgReglages").showModal();
+}
+
+function enregistrerReglages(){
+  const q = parseInt($("#fQuota").value, 10);
+  const n1 = $("#fNom1").value.trim(), n2 = $("#fNom2").value.trim();
+  const modifDonnees =
+    (q && q !== data.quota) ||
+    (n1 && n1 !== data.enfants[0].nom) ||
+    (n2 && n2 !== data.enfants[1].nom);
+
+  if(q > 0) data.quota = q;
+  if(n1) data.enfants[0].nom = n1;
+  if(n2) data.enfants[1].nom = n2;
+
+  cfg = {owner:$("#fOwner").value.trim(), repo:$("#fRepo").value.trim(), path:$("#fPath").value.trim().replace(/^\/+/,"")};
+  token = $("#fToken").value.trim();
+  ecrire("cfg", cfg);
+  ecrire("token", token);
+
+  if(modifDonnees) enAttente.__config = true;
+  sauverLocal();
+  rendre();
+  if(synchroActive()) synchroniser(true); else { etatSync = "local"; rendreSync(); }
+}
+
+/* ---------- interactions ---------- */
+$("#grille").addEventListener("click", ev => {
+  const c = ev.target.closest(".case");
+  if(!c || c.classList.contains("vide")) return;
+  selection = (selection === c.dataset.date) ? null : c.dataset.date;
+  rendreCalendrier(); rendrePanneau();
+});
+$("#listeEnfants").addEventListener("click", ev => {
+  const b = ev.target.closest(".enfant");
+  if(b && !b.disabled) basculer(b.dataset.enfant);
+});
+$("#prev").addEventListener("click", ()=>{ curseur = new Date(curseur.getFullYear(), curseur.getMonth()-1, 1); rendreCalendrier(); });
+$("#next").addEventListener("click", ()=>{ curseur = new Date(curseur.getFullYear(), curseur.getMonth()+1, 1); rendreCalendrier(); });
+$("#auj").addEventListener("click", ()=>{ curseur = new Date(); selection = clefDate(new Date()); rendreCalendrier(); rendrePanneau(); });
+$("#btnSync").addEventListener("click", ()=> synchroniser(true));
+$("#btnReglages").addEventListener("click", ouvrirReglages);
+$("#btnHisto").addEventListener("click", ouvrirHistorique);
+$("#fermerHisto").addEventListener("click", ()=> $("#dlgHisto").close());
+$("#dlgReglages").addEventListener("close", ev => {
+  if($("#dlgReglages").returnValue === "ok") enregistrerReglages();
+});
+
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden && synchroActive()) synchroniser(false); });
+setInterval(()=>{ if(!document.hidden && synchroActive()) synchroniser(false); }, 60000);
+
+/* ---------- démarrage ---------- */
+selection = clefDate(new Date());
+etatSync = synchroActive() ? (token ? "ok" : "lecture") : "local";
+rendre();
+if(synchroActive()) synchroniser(Object.keys(enAttente).length > 0);
+</script>
+</body>
+</html>
