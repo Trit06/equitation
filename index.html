@@ -95,6 +95,12 @@ header h1{font-size:21px;letter-spacing:-.01em}
 .jauge i{display:block;height:100%}
 .detail{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:12px;font-size:13px;color:var(--encre-doux)}
 .detail b{color:var(--encre);font-weight:600}
+.alerte{
+  margin-top:12px;border:1px solid #C0392B;border-radius:12px;padding:12px 14px;
+  background:color-mix(in srgb,#C0392B 7%,transparent);font-size:13px;line-height:1.5;
+}
+.alerte strong{display:block;margin-bottom:3px;font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:#C0392B}
+.alerte .brut{display:block;margin-top:6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:var(--encre-doux);word-break:break-word}
 .puce{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:1px}
 
 /* ---- calendrier ---- */
@@ -190,6 +196,7 @@ input:focus{outline:2px solid var(--cuir);outline-offset:1px;border-color:transp
     </div>
     <div class="jauge" id="jauge"></div>
     <div class="detail" id="detail"></div>
+    <div class="alerte" id="alerte" hidden></div>
   </section>
 
   <div class="mois">
@@ -206,7 +213,7 @@ input:focus{outline:2px solid var(--cuir);outline-offset:1px;border-color:transp
   <section class="jour" id="panneau" hidden>
     <div class="date" id="dateSel"></div>
     <div class="enfants" id="listeEnfants"></div>
-    <div class="aide">Touchez un nom pour faire défiler&nbsp;: rien → venu → absent.</div>
+    <div class="aide" id="aide">Touchez un nom pour faire défiler&nbsp;: rien → venu → absent.</div>
   </section>
 
   <div class="pied">
@@ -234,10 +241,10 @@ input:focus{outline:2px solid var(--cuir);outline-offset:1px;border-color:transp
   <fieldset><legend>Synchronisation GitHub</legend>
     <div class="rangee">
       <div><label for="fOwner">Compte</label><input type="text" id="fOwner" placeholder="Trit06" autocomplete="off" spellcheck="false"></div>
-      <div><label for="fRepo">Dépôt</label><input type="text" id="fRepo" placeholder="trit06.github.io" autocomplete="off" spellcheck="false"></div>
+      <div><label for="fRepo">Dépôt</label><input type="text" id="fRepo" placeholder="equitation" autocomplete="off" spellcheck="false"></div>
     </div>
     <label for="fPath">Fichier de données</label>
-    <input type="text" id="fPath" placeholder="equitation/data.json" autocomplete="off" spellcheck="false">
+    <input type="text" id="fPath" placeholder="data.json" autocomplete="off" spellcheck="false">
     <label for="fToken">Jeton d'accès (pour modifier)</label>
     <input type="password" id="fToken" placeholder="github_pat_…" autocomplete="off" spellcheck="false">
     <div class="note">Sans jeton, l'app est en lecture seule&nbsp;: le compteur s'affiche mais les cases ne se cochent pas. Le jeton reste sur cet appareil.</div>
@@ -279,8 +286,13 @@ const donneesVides = () => ({
   seances: {}          // "2026-09-19": {a:"p", b:"x"}   p=venu  x=absent
 });
 
+/* Dépôt partagé, inscrit dans la page : tout visiteur lit les données
+   sans rien configurer. Le jeton, lui, n'est jamais ici — il reste
+   dans le navigateur de qui a le droit de modifier. */
+const CFG_PARTAGEE = {owner:"Trit06", repo:"equitation", path:"data.json"};
+
 let data   = Object.assign(donneesVides(), lire("data", null) || {});
-let cfg    = lire("cfg", {owner:"", repo:"", path:"equitation/data.json"});
+let cfg    = Object.assign({}, CFG_PARTAGEE, lire("cfg", null) || {});
 let token  = lire("token", "");
 let sha    = null;
 let enAttente = lire("attente", {});    // dates modifiées hors-ligne
@@ -423,6 +435,27 @@ function rendrePanneau(){
     b.appendChild(et);
     liste.appendChild(b);
   });
+
+  $("#aide").textContent = peutEcrire()
+    ? "Touchez un nom pour faire défiler : rien → venu → absent."
+    : "Page en consultation : le suivi est tenu par Florian.";
+}
+
+let msgErreur = null;
+
+function expliquer(e){
+  const s = e.statut;
+  const ou = e.action === "écriture" ? "Écriture refusée" : "Lecture impossible";
+  let cause;
+  if(s === 401)      cause = "Le jeton est refusé. Il est peut-être tronqué à la copie, expiré, ou révoqué par GitHub. Régénère-le et recolle-le en entier.";
+  else if(s === 404) cause = "GitHub ne trouve pas ce fichier. Vérifie le compte, le nom exact du dépôt et le chemin du fichier dans les Réglages — la casse compte. Si le jeton n'a pas accès à ce dépôt, GitHub répond aussi 404.";
+  else if(s === 403) cause = "Accès interdit. Le jeton n'a probablement pas la permission Contents en Read and write sur ce dépôt, ou tu as dépassé la limite de requêtes (attends une heure).";
+  else if(s === 409) cause = "Conflit d'écriture : quelqu'un a modifié le fichier en même temps. Réessaie.";
+  else if(s === 422) cause = "GitHub a refusé le contenu envoyé. Vérifie que le chemin du fichier ne commence pas par un « / ».";
+  else if(!s)        cause = "La requête n'a pas abouti : pas de réseau, ou le compte/dépôt saisi n'existe pas.";
+  else               cause = "GitHub a répondu " + s + ".";
+  const brut = (e.detail ? e.detail : e.message) + (s ? "  ·  HTTP " + s : "");
+  return {titre: ou, cause: cause, brut: brut};
 }
 
 function rendreSync(){
@@ -433,6 +466,22 @@ function rendreSync(){
     lecture:"Lecture seule", attente:"À envoyer"
   };
   $("#syncTxt").textContent = libelles[etatSync] || "Local";
+
+  const al = $("#alerte");
+  if(etatSync === "erreur" && msgErreur){
+    al.textContent = "";
+    const t = document.createElement("strong");
+    t.textContent = msgErreur.titre;
+    const p = document.createElement("span");
+    p.textContent = msgErreur.cause;
+    const c = document.createElement("span");
+    c.className = "brut";
+    c.textContent = msgErreur.brut;
+    al.append(t, p, c);
+    al.hidden = false;
+  }else{
+    al.hidden = true;
+  }
 }
 
 /* ---------- modification ---------- */
@@ -479,10 +528,20 @@ function entetes(){
   return h;
 }
 
+async function erreurGitHub(r, action){
+  let detail = "";
+  try{ const j = await r.json(); detail = j.message || ""; }catch(e){}
+  const e = new Error(detail || ("HTTP "+r.status));
+  e.statut = r.status;
+  e.action = action;
+  e.detail = detail;
+  return e;
+}
+
 async function telecharger(){
   const r = await fetch(urlContenu()+"?horodatage="+Date.now(), {headers: entetes(), cache:"no-store"});
-  if(r.status === 404) return {sha:null, distant:null};
-  if(!r.ok) throw new Error("GitHub "+r.status);
+  if(r.status === 404 && token) return {sha:null, distant:null};   // fichier pas encore créé
+  if(!r.ok) throw await erreurGitHub(r, "lecture");
   const j = await r.json();
   return {sha: j.sha, distant: JSON.parse(b64Decoder(j.content))};
 }
@@ -494,7 +553,7 @@ async function televerser(contenu, shaActuel){
   };
   if(shaActuel) corps.sha = shaActuel;
   const r = await fetch(urlContenu(), {method:"PUT", headers:Object.assign({"Content-Type":"application/json"}, entetes()), body: JSON.stringify(corps)});
-  if(!r.ok){ const e = new Error("GitHub "+r.status); e.statut = r.status; throw e; }
+  if(!r.ok) throw await erreurGitHub(r, "écriture");
   const j = await r.json();
   return j.content && j.content.sha;
 }
@@ -556,6 +615,7 @@ async function synchroniser(avecEnvoi){
     rendre();
   }catch(e){
     console.warn(e);
+    msgErreur = expliquer(e);
     etatSync = "erreur";
     rendreSync();
   }finally{
@@ -591,6 +651,20 @@ function ouvrirHistorique(){
 }
 
 /* ---------- réglages ---------- */
+/* Tolère une URL collée : « https://github.com/Trit06/equitation/ » → « equitation ». */
+function nettoyerSegment(v){
+  let s = (v || "").trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/^(www\.)?github\.com\//i, "")
+    .replace(/\.git$/i, "")
+    .replace(/\/+$/, "");
+  if(s.includes("/")){
+    const bouts = s.split("/").filter(Boolean);
+    s = bouts[bouts.length - 1];
+  }
+  return s;
+}
+
 function ouvrirReglages(){
   $("#fQuota").value = data.quota;
   $("#fNom1").value = data.enfants[0] ? data.enfants[0].nom : "";
@@ -614,7 +688,11 @@ function enregistrerReglages(){
   if(n1) data.enfants[0].nom = n1;
   if(n2) data.enfants[1].nom = n2;
 
-  cfg = {owner:$("#fOwner").value.trim(), repo:$("#fRepo").value.trim(), path:$("#fPath").value.trim().replace(/^\/+/,"")};
+  cfg = {
+    owner: nettoyerSegment($("#fOwner").value),
+    repo:  nettoyerSegment($("#fRepo").value),
+    path:  $("#fPath").value.trim().replace(/^\/+/, "") || CFG_PARTAGEE.path
+  };
   token = $("#fToken").value.trim();
   ecrire("cfg", cfg);
   ecrire("token", token);
