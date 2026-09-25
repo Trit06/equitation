@@ -224,7 +224,7 @@ input:focus{outline:2px solid var(--cuir);outline-offset:1px;border-color:transp
 
 <dialog id="dlgReglages"><form method="dialog" class="modale">
   <h2>Réglages</h2>
-  <p class="sous">Le forfait, les prénoms et la synchronisation partagée.</p>
+  <p class="sous" id="sousReglages"></p>
 
   <fieldset><legend>Forfait</legend>
     <label for="fQuota">Nombre total de cours</label>
@@ -238,16 +238,13 @@ input:focus{outline:2px solid var(--cuir);outline-offset:1px;border-color:transp
     </div>
   </fieldset>
 
-  <fieldset><legend>Synchronisation GitHub</legend>
-    <div class="rangee">
-      <div><label for="fOwner">Compte</label><input type="text" id="fOwner" placeholder="Trit06" autocomplete="off" spellcheck="false"></div>
-      <div><label for="fRepo">Dépôt</label><input type="text" id="fRepo" placeholder="equitation" autocomplete="off" spellcheck="false"></div>
-    </div>
-    <label for="fPath">Fichier de données</label>
-    <input type="text" id="fPath" placeholder="data.json" autocomplete="off" spellcheck="false">
-    <label for="fToken">Jeton d'accès (pour modifier)</label>
+  <fieldset><legend>Accès en écriture</legend>
+    <label for="fToken">Jeton GitHub</label>
     <input type="password" id="fToken" placeholder="github_pat_…" autocomplete="off" spellcheck="false">
-    <div class="note">Sans jeton, l'app est en lecture seule&nbsp;: le compteur s'affiche mais les cases ne se cochent pas. Le jeton reste sur cet appareil.</div>
+    <div class="note">
+      Données partagées&nbsp;: <code id="infoDepot"></code><br>
+      Le jeton reste sur cet appareil et n'est jamais publié. Sans jeton valide, la page est en consultation seule.
+    </div>
   </fieldset>
 
   <div class="actions">
@@ -286,14 +283,15 @@ const donneesVides = () => ({
   seances: {}          // "2026-09-19": {a:"p", b:"x"}   p=venu  x=absent
 });
 
-/* Dépôt partagé, inscrit dans la page : tout visiteur lit les données
-   sans rien configurer. Le jeton, lui, n'est jamais ici — il reste
-   dans le navigateur de qui a le droit de modifier. */
-const CFG_PARTAGEE = {owner:"Trit06", repo:"equitation", path:"data.json"};
+/* Dépôt partagé, fixé dans la page et non modifiable depuis l'app :
+   tout visiteur lit les données sans rien configurer. Le jeton, lui,
+   n'est jamais ici — il reste dans le navigateur du titulaire. */
+const cfg = Object.freeze({owner:"Trit06", repo:"equitation", path:"data.json"});
 
 let data   = Object.assign(donneesVides(), lire("data", null) || {});
-let cfg    = Object.assign({}, CFG_PARTAGEE, lire("cfg", null) || {});
 let token  = lire("token", "");
+/* "lecture" tant qu'un jeton n'a pas été validé par GitHub. */
+let droit  = "lecture";
 let sha    = null;
 let enAttente = lire("attente", {});    // dates modifiées hors-ligne
 let curseur = new Date();
@@ -303,8 +301,7 @@ let etatSync = "local";
 const $ = s => document.querySelector(s);
 const clefDate = d => d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 const couleur = i => COULEURS[i % COULEURS.length];
-const synchroActive = () => !!(cfg.owner && cfg.repo && cfg.path);
-const peutEcrire = () => !synchroActive() || !!token;
+const peutEcrire = () => droit === "ecriture";
 
 /* ---------- comptage ---------- */
 function stats(){
@@ -445,10 +442,12 @@ let msgErreur = null;
 
 function expliquer(e){
   const s = e.statut;
-  const ou = e.action === "écriture" ? "Écriture refusée" : "Lecture impossible";
+  const ou = e.action === "écriture" ? "Écriture refusée"
+           : e.action === "jeton"    ? "Jeton refusé"
+           : "Lecture impossible";
   let cause;
   if(s === 401)      cause = "Le jeton est refusé. Il est peut-être tronqué à la copie, expiré, ou révoqué par GitHub. Régénère-le et recolle-le en entier.";
-  else if(s === 404) cause = "GitHub ne trouve pas ce fichier. Vérifie le compte, le nom exact du dépôt et le chemin du fichier dans les Réglages — la casse compte. Si le jeton n'a pas accès à ce dépôt, GitHub répond aussi 404.";
+  else if(s === 404) cause = "Le jeton n'a pas accès à ce dépôt : GitHub répond 404 plutôt que 403 dans ce cas. Vérifie que « Repository access » liste bien ce dépôt et que « Contents » est en Read and write.";
   else if(s === 403) cause = "Accès interdit. Le jeton n'a probablement pas la permission Contents en Read and write sur ce dépôt, ou tu as dépassé la limite de requêtes (attends une heure).";
   else if(s === 409) cause = "Conflit d'écriture : quelqu'un a modifié le fichier en même temps. Réessaie.";
   else if(s === 422) cause = "GitHub a refusé le contenu envoyé. Vérifie que le chemin du fichier ne commence pas par un « / ».";
@@ -540,7 +539,7 @@ async function erreurGitHub(r, action){
 
 async function telecharger(){
   const r = await fetch(urlContenu()+"?horodatage="+Date.now(), {headers: entetes(), cache:"no-store"});
-  if(r.status === 404 && token) return {sha:null, distant:null};   // fichier pas encore créé
+  if(r.status === 404 && peutEcrire()) return {sha:null, distant:null};   // fichier pas encore créé
   if(!r.ok) throw await erreurGitHub(r, "lecture");
   const j = await r.json();
   return {sha: j.sha, distant: JSON.parse(b64Decoder(j.content))};
@@ -576,9 +575,34 @@ function fusionner(distant){
   return fusion;
 }
 
+/* Valide le jeton auprès de GitHub avant d'ouvrir le moindre contrôle.
+   404 ou 401 = jeton absent, révoqué, ou sans accès à ce dépôt. */
+async function verifierJeton(){
+  if(!token){ droit = "lecture"; return false; }
+  try{
+    const r = await fetch("https://api.github.com/repos/"+cfg.owner+"/"+cfg.repo,
+                          {headers: entetes(), cache:"no-store"});
+    if(r.ok){ droit = "ecriture"; return true; }
+    droit = "lecture";
+    msgErreur = expliquer(await erreurGitHub(r, "jeton"));
+    etatSync = "erreur";
+    return false;
+  }catch(e){
+    droit = "lecture";                 // hors ligne : on ne débloque rien
+    return false;
+  }
+}
+
+/* Une écriture refusée retire le droit pour la durée de la visite. */
+function retrograder(){
+  droit = "lecture";
+  enAttente = {};
+  ecrire("attente", enAttente);
+}
+
 let envoiPlanifie = null;
 function planifierEnvoi(){
-  if(!synchroActive() || !token){ etatSync = synchroActive() ? "lecture" : "local"; rendreSync(); return; }
+  if(!peutEcrire()){ rendreSync(); return; }
   etatSync = "attente"; rendreSync();
   clearTimeout(envoiPlanifie);
   envoiPlanifie = setTimeout(() => synchroniser(true), 900);
@@ -586,14 +610,13 @@ function planifierEnvoi(){
 
 let enCours = false;
 async function synchroniser(avecEnvoi){
-  if(!synchroActive()){ etatSync = "local"; rendreSync(); return; }
   if(enCours) return;
   enCours = true;
   etatSync = "occupe"; rendreSync();
   try{
     const {sha:shaDistant, distant} = await telecharger();
     sha = shaDistant;
-    const aEnvoyer = avecEnvoi && token && Object.keys(enAttente).length > 0;
+    const aEnvoyer = avecEnvoi && peutEcrire() && Object.keys(enAttente).length > 0;
     const fusion = fusionner(distant);
 
     if(aEnvoyer){
@@ -611,13 +634,14 @@ async function synchroniser(avecEnvoi){
 
     data = fusion;
     sauverLocal();
-    etatSync = token ? "ok" : "lecture";
+    etatSync = peutEcrire() ? "ok" : "lecture";
     rendre();
   }catch(e){
     console.warn(e);
     msgErreur = expliquer(e);
     etatSync = "erreur";
-    rendreSync();
+    if(e.action === "écriture" && [401,403,404].includes(e.statut)) retrograder();
+    rendre();
   }finally{
     enCours = false;
   }
@@ -651,56 +675,49 @@ function ouvrirHistorique(){
 }
 
 /* ---------- réglages ---------- */
-/* Tolère une URL collée : « https://github.com/Trit06/equitation/ » → « equitation ». */
-function nettoyerSegment(v){
-  let s = (v || "").trim()
-    .replace(/^https?:\/\//i, "")
-    .replace(/^(www\.)?github\.com\//i, "")
-    .replace(/\.git$/i, "")
-    .replace(/\/+$/, "");
-  if(s.includes("/")){
-    const bouts = s.split("/").filter(Boolean);
-    s = bouts[bouts.length - 1];
-  }
-  return s;
-}
-
 function ouvrirReglages(){
+  const ecriture = peutEcrire();
   $("#fQuota").value = data.quota;
   $("#fNom1").value = data.enfants[0] ? data.enfants[0].nom : "";
   $("#fNom2").value = data.enfants[1] ? data.enfants[1].nom : "";
-  $("#fOwner").value = cfg.owner;
-  $("#fRepo").value  = cfg.repo;
-  $("#fPath").value  = cfg.path;
   $("#fToken").value = token;
+  $("#infoDepot").textContent = cfg.owner+"/"+cfg.repo+" · "+cfg.path;
+
+  // Forfait et prénoms verrouillés sans jeton validé.
+  ["fQuota","fNom1","fNom2"].forEach(id => { $("#"+id).disabled = !ecriture; });
+  $("#sousReglages").textContent = ecriture
+    ? "Le forfait, les prénoms et l'accès en écriture."
+    : "Consultation seule. Le forfait et les prénoms sont verrouillés : ils ne sont modifiables qu'avec un jeton d'accès valide.";
   $("#dlgReglages").showModal();
 }
 
-function enregistrerReglages(){
-  const q = parseInt($("#fQuota").value, 10);
-  const n1 = $("#fNom1").value.trim(), n2 = $("#fNom2").value.trim();
-  const modifDonnees =
-    (q && q !== data.quota) ||
-    (n1 && n1 !== data.enfants[0].nom) ||
-    (n2 && n2 !== data.enfants[1].nom);
+async function enregistrerReglages(){
+  const nouveauJeton = $("#fToken").value.trim();
+  const jetonChange = nouveauJeton !== token;
 
-  if(q > 0) data.quota = q;
-  if(n1) data.enfants[0].nom = n1;
-  if(n2) data.enfants[1].nom = n2;
+  if(jetonChange){
+    token = nouveauJeton;
+    ecrire("token", token);
+    etatSync = "occupe"; rendreSync();
+    await verifierJeton();
+  }
 
-  cfg = {
-    owner: nettoyerSegment($("#fOwner").value),
-    repo:  nettoyerSegment($("#fRepo").value),
-    path:  $("#fPath").value.trim().replace(/^\/+/, "") || CFG_PARTAGEE.path
-  };
-  token = $("#fToken").value.trim();
-  ecrire("cfg", cfg);
-  ecrire("token", token);
+  if(peutEcrire()){
+    const q  = parseInt($("#fQuota").value, 10);
+    const n1 = $("#fNom1").value.trim(), n2 = $("#fNom2").value.trim();
+    const modif =
+      (q > 0 && q !== data.quota) ||
+      (n1 && n1 !== data.enfants[0].nom) ||
+      (n2 && n2 !== data.enfants[1].nom);
+    if(q > 0) data.quota = q;
+    if(n1) data.enfants[0].nom = n1;
+    if(n2) data.enfants[1].nom = n2;
+    if(modif) enAttente.__config = true;
+    sauverLocal();
+  }
 
-  if(modifDonnees) enAttente.__config = true;
-  sauverLocal();
   rendre();
-  if(synchroActive()) synchroniser(true); else { etatSync = "local"; rendreSync(); }
+  synchroniser(peutEcrire());
 }
 
 /* ---------- interactions ---------- */
@@ -725,14 +742,18 @@ $("#dlgReglages").addEventListener("close", ev => {
   if($("#dlgReglages").returnValue === "ok") enregistrerReglages();
 });
 
-document.addEventListener("visibilitychange", ()=>{ if(!document.hidden && synchroActive()) synchroniser(false); });
-setInterval(()=>{ if(!document.hidden && synchroActive()) synchroniser(false); }, 60000);
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) synchroniser(false); });
+setInterval(()=>{ if(!document.hidden) synchroniser(false); }, 60000);
 
 /* ---------- démarrage ---------- */
 selection = clefDate(new Date());
-etatSync = synchroActive() ? (token ? "ok" : "lecture") : "local";
+etatSync = token ? "occupe" : "lecture";
 rendre();
-if(synchroActive()) synchroniser(Object.keys(enAttente).length > 0);
+(async ()=>{
+  await verifierJeton();                 // rien n'est déverrouillé avant cette réponse
+  rendre();
+  synchroniser(Object.keys(enAttente).length > 0);
+})();
 </script>
 </body>
 </html>
